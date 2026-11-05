@@ -1,0 +1,20 @@
+name: Go checks
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: go-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: false
+      - run: go test -race ./...
+      - run: go vet ./...

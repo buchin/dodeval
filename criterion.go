@@ -20,19 +20,45 @@ type Criterion struct {
 
 var (
 	// regex for markdown task checklist items: - [ ] or - [x] or * [ ] or 1. [ ]
-	taskCheckboxRegex = regexp.MustCompile(`^(?:\s*[-*+]|\s*\d+\.)\s*\[([ xX])\]\s*(.*)$`)
+	taskCheckboxRegex = regexp.MustCompile(`^(?:\s*[-*+]|\s*\d+[.)])\s*\[([ xX])\]\s*(.*)$`)
 	// regex for numbered or bullet list items without explicit checkbox: 1. text or - text
-	listItemRegex = regexp.MustCompile(`^(?:\s*[-*+]|\s*\d+\.)\s*(.*)$`)
+	listItemRegex = regexp.MustCompile(`^(?:\s*[-*+]|\s*\d+[.)])\s*(.*)$`)
 )
 
 // ParseChecklist parses markdown content or structured criteria text into a slice of Criterion.
-func ParseChecklist(input string) []Criterion {
+func ParseChecklist(input string) []Criterion { return parseChecklist(input, false) }
+
+// ParseRequirements extracts requested outcomes, never completed work. Explicit
+// acceptance sections take precedence; otherwise ordinary lists are accepted.
+// Checked plan boxes remain unverified and duplicate requirements are collapsed.
+func ParseRequirements(input string) []Criterion { return parseChecklist(input, true) }
+
+var acceptanceHeading = regexp.MustCompile(`(?i)^(?:definition of done|acceptance criteria|kriteria penerimaan|kriteria selesai|kriteria|dod)\s*[:—-]?\s*$`)
+
+func isAcceptanceHeading(line string) bool {
+	return acceptanceHeading.MatchString(strings.Trim(cleanMarkdownFormatting(line), "# *_\t"))
+}
+
+func parseChecklist(input string, requirements bool) []Criterion {
 	var items []Criterion
 	scanner := bufio.NewScanner(strings.NewReader(input))
 	index := 0
+	seen := map[string]bool{}
+	if requirements {
+		scanner.Buffer(make([]byte, 4096), max(64<<10, len(input)+1))
+	}
 
 	inCriteriaSection := false
 	hasSectionHeaders := strings.Contains(input, "### ") || strings.Contains(input, "## ")
+	if requirements {
+		hasSectionHeaders = false
+		for _, line := range strings.Split(input, "\n") {
+			if isAcceptanceHeading(strings.TrimSpace(line)) {
+				hasSectionHeaders = true
+				break
+			}
+		}
+	}
 
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -42,7 +68,17 @@ func ParseChecklist(input string) []Criterion {
 		}
 
 		lower := strings.ToLower(trimmed)
-		if strings.HasPrefix(lower, "#") {
+		if requirements {
+			if isAcceptanceHeading(trimmed) {
+				inCriteriaSection = true
+				continue
+			}
+			if strings.HasPrefix(trimmed, "#") || (hasSectionHeaders && strings.HasSuffix(trimmed, ":") && !listItemRegex.MatchString(trimmed)) {
+				inCriteriaSection = false
+				continue
+			}
+		}
+		if !requirements && strings.HasPrefix(lower, "#") {
 			if strings.Contains(lower, "definition of done") ||
 				strings.Contains(lower, "acceptance criteria") ||
 				strings.Contains(lower, "kriteria selesai") ||
@@ -58,7 +94,7 @@ func ParseChecklist(input string) []Criterion {
 		// If document has section headers, prefer parsing items inside criteria section
 		// unless none found or line is an explicit markdown checkbox
 		isCheckbox := taskCheckboxRegex.MatchString(trimmed)
-		if hasSectionHeaders && !inCriteriaSection && !isCheckbox {
+		if hasSectionHeaders && !inCriteriaSection && (requirements || !isCheckbox) {
 			continue
 		}
 
@@ -67,7 +103,7 @@ func ParseChecklist(input string) []Criterion {
 
 		if matches := taskCheckboxRegex.FindStringSubmatch(trimmed); len(matches) == 3 {
 			mark := strings.ToLower(matches[1])
-			completed = (mark == "x")
+			completed = !requirements && (mark == "x")
 			text = strings.TrimSpace(matches[2])
 		} else if matches := listItemRegex.FindStringSubmatch(trimmed); len(matches) == 2 {
 			text = strings.TrimSpace(matches[1])
@@ -80,8 +116,15 @@ func ParseChecklist(input string) []Criterion {
 			continue
 		}
 
-		index++
 		cleanText := cleanMarkdownFormatting(text)
+		if requirements {
+			key := strings.ToLower(cleanText)
+			if seen[key] {
+				continue
+			}
+			seen[key] = true
+		}
+		index++
 		keywords := extractKeywords(cleanText)
 
 		items = append(items, Criterion{
@@ -98,7 +141,8 @@ func ParseChecklist(input string) []Criterion {
 	return items
 }
 
-// ParseAcceptanceCriteria is an alias to ParseChecklist for DoD and Acceptance Criteria extraction.
+// ParseAcceptanceCriteria is an alias to ParseChecklist and preserves checked
+// states. Use ParseRequirements for requested work that still needs verification.
 func ParseAcceptanceCriteria(input string) []Criterion {
 	return ParseChecklist(input)
 }

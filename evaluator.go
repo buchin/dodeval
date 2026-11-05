@@ -6,7 +6,8 @@ import (
 	"time"
 )
 
-// Evidence holds all verified facts, test outputs, notes, and artifacts submitted for evaluation.
+// Evidence holds reported facts, test outputs, notes and artifact references.
+// The package does not independently verify the submitted information.
 type Evidence struct {
 	Assertions        []string       `json:"assertions,omitempty"`
 	Summary           string         `json:"summary,omitempty"`
@@ -22,7 +23,7 @@ type Evidence struct {
 	CommitSHA         string         `json:"commit_sha,omitempty"`
 }
 
-// EvaluationResult contains the objective comparison between criteria and evidence.
+// EvaluationResult contains a heuristic comparison of criteria and reported text.
 type EvaluationResult struct {
 	Passed            bool          `json:"passed"`
 	TotalCriteria     int           `json:"total_criteria"`

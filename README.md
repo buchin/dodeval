@@ -1,16 +1,16 @@
-# `dodeval` — Definition of Done & Acceptance Criteria Evaluator
+# dodeval
 
-`dodeval` adalah *micro-package* mandiri (zero external dependencies) untuk mem-parsing checklist Definition of Done (DoD) atau kriteria penerimaan dari Markdown/teks, dan mengevaluasi kesesuaian bukti verifikasi laporan (*evidence gap analysis*).
+A dependency-free Go parser for acceptance requirements and textual gap analysis.
 
-## Fitur Utama
+## Install
 
-- **Zero External Dependencies**: Menggunakan murni Go standard library (`bufio`, `regexp`, `strings`, `time`).
-- **Markdown Checklist Parser**: Mendukung checklist format `- [ ]` / `- [x]`, bullet list, serta numbered list bergradasi.
-- **Evidence Gap Analyzer**: Membandingkan korpus bukti laporan (ringkasan, catatan, artefak, output tes) terhadap target kriteria dengan toleransi kecocokan kata kunci (*keyword density matching*).
-- **Audit & Metadata Override**: Menerima verifikasi eksplisit lewat metadata untuk pengujian custom.
-- **Rekomendasi Aksi Otomatis**: Menghasilkan aksi terarah seperti `mark_done` atau `auto_requeue` sesuai kelulusan persentase DoD.
+```sh
+go get github.com/buchin/dodeval@v0.1.0
+```
 
-## Cara Penggunaan
+Use the Go version declared in [go.mod](go.mod) or a newer compatible version.
+
+## Parse requested work
 
 ```go
 package main
@@ -21,22 +21,46 @@ import (
 )
 
 func main() {
-    checklist := `
-### Definition of Done
-- [ ] Targeted tests pass 100% dalam waktu kurang dari 10 detik
-- [ ] Kompilasi build Go 0 error
-- [ ] Dokumentasi dan Landing Page diperbarui
-`
-    evidence := dodeval.Evidence{
-        Summary:     "Kompilasi build Go 0 error dan dokumentasi diperbarui.",
-        TestSummary: "Targeted tests pass 100% dalam waktu 0.05 detik.",
-        Assertions:  []string{"Landing page updated with new capability"},
-    }
-
-    evaluator := dodeval.NewEvaluator()
-    result := evaluator.EvaluateString(checklist, evidence)
-
-    fmt.Printf("Passed: %v (%.1f%%)\n", result.Passed, result.Percentage)
-    fmt.Printf("Action: %s\n", result.Action)
+    criteria := dodeval.ParseRequirements("DoD:\n- [x] Verify production health")
+    fmt.Println(criteria[0].Text)      // Verify production health
+    fmt.Println(criteria[0].Completed) // false: a plan is not verification
 }
 ```
+
+`ParseRequirements` accepts Markdown checkboxes, bullet lists, and numbered lists
+using `1.` or `1)`. It prefers explicit acceptance sections when present, otherwise
+reads the requested lists. English and Indonesian acceptance headings are
+supported. Duplicate requirements are collapsed and every requirement starts
+unverified, regardless of its original checkbox state. Long preambles do not
+silently hide later requirements.
+
+`ParseChecklist` and its `ParseAcceptanceCriteria` alias retain checkbox states
+for checklist-tracking applications. Their existing behavior is preserved. Use
+`ParseRequirements` when ingesting an approved plan or agent instructions.
+
+## Analyze reported text
+
+`AnalyzeGaps(criteria, evidence)` and `NewEvaluator` compare requirements with the
+provided `Evidence` text and optional explicit metadata. Matching uses substrings
+and configurable keyword overlap. It does not execute tests, inspect production,
+validate artifacts, detect every contradiction, or establish that external
+operations occurred. A checked item supplied to the tracking evaluator is trusted
+as caller-provided state.
+
+`EvaluationResult.Passed` describes that text comparison. The legacy `Action`
+values (`mark_done`, `auto_requeue`, `review`) are recommendations, never executed
+commands or authorization. Application approval and independent verification must
+remain with the caller. An empty requirement set means no criteria were compared;
+it does not establish that the original work was completed.
+
+The package has no database, provider, process runner or application policy.
+
+## Check
+
+```sh
+go test -race ./...
+go vet ./...
+```
+
+The [executable example](example_test.go) is included in the tests.
+[MIT license](LICENSE).
