@@ -33,7 +33,7 @@ func ParseChecklist(input string) []Criterion { return parseChecklist(input, fal
 // Checked plan boxes remain unverified and duplicate requirements are collapsed.
 func ParseRequirements(input string) []Criterion { return parseChecklist(input, true) }
 
-var acceptanceHeading = regexp.MustCompile(`(?i)^(?:definition of done|acceptance criteria|kriteria penerimaan|kriteria selesai|kriteria|dod)\s*[:—-]?\s*$`)
+var acceptanceHeading = regexp.MustCompile(`(?i)^(?:definition of done(?:\s*\(dod\))?|acceptance criteria(?:\s*\(ac\))?|kriteria penerimaan(?:\s*\(dod\))?|kriteria selesai(?:\s*\(dod\))?|kriteria|dod)\s*[:—-]?\s*$`)
 
 func isAcceptanceHeading(line string) bool {
 	return acceptanceHeading.MatchString(strings.Trim(cleanMarkdownFormatting(line), "# *_\t"))
